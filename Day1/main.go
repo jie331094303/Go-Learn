@@ -2,7 +2,9 @@ package main
 
 //学习闭包
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func main() {
 	test()
@@ -10,7 +12,8 @@ func main() {
 
 func test() {
 	//addTest()
-	f1Test()
+	//f1Test()
+	InterfaceTest()
 }
 
 func addTest() {
@@ -38,4 +41,32 @@ func f1(num int) (returnA func(rAParam int) int) {
 	return func(b int) int {
 		return num + b
 	}
+}
+
+type Chinese struct {
+	language string
+}
+
+func (c Chinese) Say() {
+	fmt.Println(c.language)
+}
+
+type American struct {
+	language string
+}
+
+func (a American) Say() {
+	fmt.Println(a.language)
+}
+
+type exampleInterface interface {
+	Say()
+}
+
+// InterfaceTest is a test
+func InterfaceTest() {
+	var in1 exampleInterface = Chinese{language: "中文"}
+	in1.Say()
+	var in2 exampleInterface = American{language: "英文"}
+	in2.Say()
 }
