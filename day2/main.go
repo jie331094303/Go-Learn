@@ -12,7 +12,7 @@ var fileCount int = 0
 func main() {
 	start := time.Now()
 	//path := strings.ReplaceAll(`C:\Users\Administrator\Desktop\Client_frp\`, "\\", "/")
-	path := strings.ReplaceAll(`D:\`, "\\", "/")
+	path := strings.ReplaceAll(`C:\`, "\\", "/")
 	Search(path)
 	fmt.Println(fileCount, time.Since(start))
 }
@@ -22,19 +22,16 @@ func Search(path string) {
 	if err == nil {
 		for _, file := range files {
 			fileName := file.Name()
-			if strings.Contains(fileName, "0") || strings.Contains(fileName, "1") || strings.Contains(fileName, "a") {
+			if strings.Contains(fileName, "0") {
 				fileCount++
 			}
 			if file.IsDir() {
+				//fmt.Println(path + fileName + "/")
 				Search(path + fileName + "/")
-				if fileCount < 10 {
-					fmt.Println(fileName)
-				}
-				fileCount++
 			}
 		}
 	} else {
-		fmt.Println(err.Error())
+		//fmt.Println(err.Error())
 	}
 }
 
