@@ -26,6 +26,7 @@ func main() {
 }
 
 func Search(path string, master bool) {
+	fmt.Println("工人数：", currentWorkCout)
 	files, erro := ioutil.ReadDir(path)
 	if erro == nil {
 		for _, file := range files {
@@ -47,7 +48,7 @@ func Search(path string, master bool) {
 		}
 	} else {
 		workDone <- true
-		fmt.Println("ERRO!!", erro.Error())
+		//fmt.Println("ERRO!!", erro.Error())
 	}
 }
 
