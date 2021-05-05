@@ -16,28 +16,33 @@ type model struct {
 }
 
 var currentWorker int = 0
-var maxWorker int = 100
+var maxWorker int = 3
 var workStatus chan bool = make(chan bool) //false 刚开工 true 完工了
-
+var dbMaxRow int = 100                     //2151444
 var isFind chan bool = make(chan bool)
 var foudCount = 0
+var startRow int = 0
+var endRow int = 0
+var step int = 9
+var dbData []model
 
 //var currentTreadQuery chan bool = make(chan bool)
 
 func main() {
 	startTime := time.Now()
 	fmt.Println(startTime)
-	var dbMaxRow int = 2151444 //2151444
-	var step int = dbMaxRow / maxWorker
 	var startRow int = 1
-	dbData := QueryAllData()
-	for i := 0; i < maxWorker; i++ {
-		currentWorker++
-		endRow := startRow + step
-		go QueryCount(dbData, startRow, endRow)
-		startRow = endRow + 1
-	}
-	WaitGroup()
+	dbData = QueryAllData()
+	func() {
+		for i := 0; i < maxWorker; i++ {
+			currentWorker++
+			endRow = startRow + step
+			fmt.Printf("查询区间:%d-%d\n", startRow, endRow)
+			go QueryCount(dbData, startRow, endRow)
+			startRow = endRow + 1
+		}
+	}()
+	WaitGroup() //TODO 为什么startRow是全局变量，而进入select后又从1开始
 	fmt.Println(foudCount, time.Since(startTime))
 }
 
@@ -49,6 +54,15 @@ func WaitGroup() {
 		case workStatus := <-workStatus:
 			if workStatus {
 				currentWorker--
+				if endRow <= dbMaxRow {
+					endRow = startRow + step
+					fmt.Printf("se查询区间:%d-%d\n", startRow, endRow)
+
+					go QueryCount(dbData, startRow, endRow)
+					startRow = endRow + 1
+				} else {
+					currentWorker = 0
+				}
 			} else {
 				currentWorker++
 			}
@@ -64,7 +78,7 @@ func QueryAllData() []model {
 	//workStatus <- false
 	//fmt.Println(currentWorker, strRow, endRow)
 	now := time.Now()
-	var server = "192.168.83.140"
+	var server = "192.168.83.144"
 	var port = 1433
 	var user = "sa"
 	var password = "kingdee@2018"
@@ -81,7 +95,7 @@ func QueryAllData() []model {
 		log.Fatal("Open Connection failed:", err.Error())
 	}
 	defer conn.Close()
-	sqlContent := "select FID,FPARAMCONTENT from T_SWSAPILOG"
+	sqlContent := "select TOP(1) FID,FPARAMCONTENT from T_SWSAPILOG"
 
 	//sqlContent := fmt.Sprintf("select FID,FPARAMCONTENT from T_SWSAPILOG where FID between %d and %d", strRow, endRow)
 	//产生查询语句的Statement
@@ -117,7 +131,7 @@ func QueryAllData() []model {
 }
 
 func QueryCount(models []model, startRow int, endRow int) {
-	fmt.Printf("查询区间:%d-%d\n", startRow, endRow)
+	workStatus <- false
 	for _, v := range models {
 		if startRow <= v.id && v.id <= endRow && strings.Contains(v.json, "trade_partner.create") {
 			isFind <- true
