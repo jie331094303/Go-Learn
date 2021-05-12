@@ -33,16 +33,17 @@ type Entity struct {
 	description string
 }
 
-// var totalCout int = 0
-// var filterCout int = 0
-// var dealErroUrlCount int = 0
-// var maxWork int = 0
-// var spiderDoneCount = 0
-// var findNeedSpiderUrlCount chan int = make(chan int)
-// var findDealErro chan bool = make(chan bool)
-// var findFilter chan bool = make(chan bool)
-// var spiderDone chan bool = make(chan bool)
-// var workDone chan bool = make(chan bool)
+var totalCout int = 0
+var filterCout int = 0
+var dealErroUrlCount int = 0
+var spiderDoneCount = 0
+var spiderDBRecordCount int64 = 0
+var findNeedSpiderUrlCount chan int = make(chan int)
+var findDealErro chan bool = make(chan bool)
+var findFilter chan bool = make(chan bool)
+var spiderDone chan bool = make(chan bool)
+var workDone chan bool = make(chan bool)
+var curSpiderDBCount chan int64 = make(chan int64)
 
 func main() {
 	InitLogParamter()
@@ -55,12 +56,18 @@ func main() {
 		"https://open.kingdee.com/K3Cloud/PDM/成本管理_files/成本管理_toc.html",
 		"https://open.kingdee.com/K3Cloud/PDM/集团财务_files/集团财务_toc.html",
 	}
-	//maxWork = len(indexUrls)
 	now := time.Now()
 	for _, indexUrl := range indexUrls {
-		Spider(indexUrl)
+		go Spider(indexUrl)
 	}
+	chanManager()
 	log.Println("耗时:", time.Since(now))
+	log.Printf("全部网页为:%d", totalCout)
+	log.Printf("过滤网页为:%d", filterCout)
+	log.Printf("处理异常网页为:%d", dealErroUrlCount)
+	log.Printf("爬取到的网页为:%d", spiderDoneCount)
+	log.Printf("爬取到数据库的行数:%d", spiderDBRecordCount) //包含表头spiderDoneCount，单据的真实数据要减去spiderDoneCount
+
 }
 
 func InitLogParamter() {
@@ -74,20 +81,29 @@ func InitLogParamter() {
 	log.SetFlags(log.Lmicroseconds | log.Ldate)
 }
 
-// func chanManager() {
-// 	for {
-// 		select {
-// 		case urlCount := <-findNeedSpiderUrlCount:
-// 			totalCout += urlCount
-// 		case <-findFilter:
-// 			filterCout++
-// 		case <-findDealErro:
-// 			dealErroUrlCount++
-// 		case <- spiderDone:
-// 			spiderDoneCount++
-// 		}
-// 	}
-// }
+func chanManager() {
+	var maxWorker int
+	for {
+		select {
+		case urlCount := <-findNeedSpiderUrlCount:
+			totalCout += urlCount
+		case <-findFilter:
+			filterCout++
+		case <-findDealErro:
+			dealErroUrlCount++
+		case <-spiderDone:
+			spiderDoneCount++
+		case spiderDBCount := <-curSpiderDBCount:
+			spiderDBRecordCount += spiderDBCount
+		case <-workDone:
+			maxWorker++
+			if maxWorker == 7 {
+				return
+			}
+
+		}
+	}
+}
 
 func Spider(indexUrl string) {
 	//获取拼接标题前缀
@@ -95,11 +111,12 @@ func Spider(indexUrl string) {
 	typeName := strings.Split(lastStr, "_")[0]
 	requestUrls := GetSpiderUrls(typeName, indexUrl)
 	urlTitle := strings.ReplaceAll(indexUrl, lastStr, "")
-
+	findNeedSpiderUrlCount <- len(requestUrls)
 	for _, url := range requestUrls {
 		//fmt.Println(urlTitle + url)
 		StartSpider(urlTitle + url)
 	}
+	workDone <- true
 	// testUrl := "https://open.kingdee.com/K3Cloud/PDM/BD基础_files/Home_LightBlue.html"
 	// StartSpider(testUrl)
 
@@ -155,6 +172,7 @@ func StartSpider(url string) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("过滤h2是否有数据表描述失败:%v", url)
+			findFilter <- true
 		}
 	}()
 	h2content := doc.Find("h2").Find("a").Text()
@@ -170,6 +188,7 @@ func StartSpider(url string) {
 		}
 	} else {
 		log.Printf("当前网页不需要spider:%s", url)
+		findFilter <- true
 	}
 
 }
@@ -203,6 +222,7 @@ func GetModelHead(url string, doc soup.Root, model *TabelModel) bool {
 			if err := recover(); err != nil {
 				log.Printf("获取头部异常:%s", url)
 				isErro = true
+				findDealErro <- true
 			}
 		}()
 	}
@@ -243,6 +263,7 @@ func GetModelEntity(url string, doc soup.Root, model *TabelModel) bool {
 		if err := recover(); err != nil {
 			log.Printf("获取头部单据体异常:%s", url)
 			isErro = true
+			findDealErro <- true
 		}
 	}()
 	return isErro
@@ -279,7 +300,10 @@ func InsertToDB(url string, model *TabelModel) {
 	}
 	if effectRow > 0 {
 		log.Printf("成功抓取：%s", url)
+		curSpiderDBCount <- effectRow
 	}
+	spiderDone <- true
+
 }
 
 func GetSql(url string, model *TabelModel) string {
