@@ -4,7 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"math"
+	"math/rand"
+	"net/http"
 	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
@@ -43,24 +47,70 @@ type Page struct {
 	Count int `json:"count"`
 }
 
-func main() {
-	//https://space.bilibili.com/1885078/video?tid=0&page=1&keyword=&order=pubdate
-	url := "https://api.bilibili.com/x/space/arc/search?mid=1885078&ps=30&tid=0&pn=1&keyword=&order=pubdate&jsonp=jsonp"
-	// res, erro := http.Get(url)
-	// if erro != nil {
-	// 	log.Println("Request erro")
-	// } else {
-	// 	by, _ := ioutil.ReadAll(res.Body)
-	// 	log.Println(string(by))
-	// }
+//1885078 --Nya酱
+//163637592 --何同学
+//1951371956 --Juli刘
+var upId int = 1951371956
 
-	testJson := getJson()
-	var jsonModel JsonModel
-	erro := json.Unmarshal([]byte(testJson), &jsonModel)
-	if erro != nil {
-		fmt.Println("转换错误")
+func main() {
+	indexUrl := fmt.Sprintf("https://api.bilibili.com/x/space/arc/search?mid=%d&ps=30&tid=0&pn=1&keyword=&order=pubdate&jsonp=jsonp", upId)
+	maxPageIndex := GetMaxPageIndex(indexUrl)
+	SpiderUrl(maxPageIndex)
+}
+
+func GetMaxPageIndex(url string) int {
+	jsonModel, _ := GetUrlBody(url)
+	pageCount := jsonModel.Data.Page.Count
+	pageSize := jsonModel.Data.Page.Ps
+	if pageSize == 0 {
+		panic("pageSize is zero")
 	}
-	InsertToDB(url, &jsonModel)
+
+	return int(math.Ceil(float64(pageCount) / float64(pageSize)))
+}
+
+func GetUrlBody(url string) (JsonModel, bool) {
+	var jsonModel JsonModel
+	isSuccess := true
+	res, erro := http.Get(url)
+	if erro != nil {
+		log.Printf("Request erro:%s", url)
+	} else {
+		by, _ := ioutil.ReadAll(res.Body)
+		erro1 := json.Unmarshal([]byte(by), &jsonModel)
+		if erro1 != nil {
+			fmt.Println("Unmarshal erro")
+			isSuccess = false
+		}
+	}
+	defer func() {
+		if erro := recover(); erro != nil {
+			log.Println("Get Body erro")
+			isSuccess = false
+		}
+	}()
+	return jsonModel, isSuccess
+}
+
+func SpiderUrl(maxPageIndex int) {
+	if maxPageIndex != 0 {
+		for index := 1; index <= maxPageIndex; index++ {
+			spiderUrl := fmt.Sprintf("https://api.bilibili.com/x/space/arc/search?mid=%d&ps=30&tid=0&pn=%d&keyword=&order=pubdate&jsonp=jsonp", upId, index)
+			rand.Seed(time.Now().Unix())
+			sleepRandom := rand.Intn(30)
+			time.Sleep(time.Duration(sleepRandom) * time.Second)
+			log.Printf("sleep %d second:%s", sleepRandom, spiderUrl)
+			JsonModel, isSuccess := GetUrlBody(spiderUrl)
+			if isSuccess {
+				InsertToDB(spiderUrl, &JsonModel)
+			} else {
+				log.Printf("Get JsonModel Erro:%s", spiderUrl)
+			}
+
+		}
+	} else {
+		log.Println("maxPageIndex is zero")
+	}
 }
 
 func InsertToDB(url string, spiderModel *JsonModel) {
