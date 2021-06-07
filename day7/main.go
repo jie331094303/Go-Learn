@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
@@ -50,7 +51,8 @@ type Page struct {
 //1885078 --Nya酱
 //163637592 --何同学
 //1951371956 --Juli刘
-var upId int = 1951371956
+//38407276 邓园长
+var upId int = 38407276
 
 func main() {
 	indexUrl := fmt.Sprintf("https://api.bilibili.com/x/space/arc/search?mid=%d&ps=30&tid=0&pn=1&keyword=&order=pubdate&jsonp=jsonp", upId)
@@ -136,11 +138,11 @@ func InsertToDB(url string, spiderModel *JsonModel) {
 	//产生查询语句的Statement
 	result, err := conn.Exec(sqlStr)
 	if err != nil {
-		log.Fatal("insert failed:", err.Error())
+		log.Printf("insert failed:%s", sqlStr)
 	}
 	effectRow, err := result.RowsAffected()
 	if err != nil {
-		log.Fatal("insert failed:", err.Error())
+		log.Printf("get effecyt row failed:%s", sqlStr)
 	}
 	if effectRow > 0 {
 		log.Printf("成功抓取：%s", url)
@@ -167,7 +169,7 @@ func GetSql(url string, spiderModel *JsonModel) string {
 					,[FBvid]
 					,[FAddTime])
 		VALUES	('%s','%s','%s','%s','%d','%d','%s','%d','%s',GETDATE())
-		`, url, v.Author, v.Pic, v.Title, v.Comment, v.Play, createTime, v.Video_review, v.Bvid)
+		`, url, v.Author, v.Pic, strings.ReplaceAll(v.Title, "'", "\""), v.Comment, v.Play, createTime, v.Video_review, v.Bvid)
 	}
 
 	return sqlStr
